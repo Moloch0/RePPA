@@ -1,0 +1,59 @@
+{
+  "schema": "rootpart_rpr_benchmark_baseline_v1",
+  "id": "production-schema4-asc-local-move-20261106",
+  "dataset_id": "current-schema4",
+  "config_id": "production",
+  "source_report": "results/20261106-local-move-production-repeat/benchmark.json",
+  "expected": {
+    "native_statistics": {
+      "T": 52505486,
+      "P": 68039827,
+      "m": 181664804
+    },
+    "partition_search": {
+      "solver": {
+        "id": "rpr",
+        "version": 11
+      },
+      "initial_incumbent": {
+        "id": "asc",
+        "version": 1
+      },
+      "initialization": "asc",
+      "termination_reason": "min_delta_reached"
+    },
+    "artifact": {
+      "root_count": 1296308,
+      "root_identity_fnv1a64": "405b31f5f3e12f32",
+      "admissible_membership_count": 13130585,
+      "termination_reason": "min_delta_reached",
+      "files": {
+        "roots.tsv": {
+          "sha256": "96f2115ce5046e8e4b7597c8cddf5f7e14bc99695378552e7ab81587203ad761"
+        },
+        "root_of.tsv": {
+          "sha256": "800ced0f10638c59dd68f038f94bfe357b3bf711a1ec3c745184d2a6101fd40c"
+        },
+        "diagnostics.summary.tsv": {
+          "sha256": "09494184256e838a0db07512e31fcdf91d45e4efe42715180b9a180ca7d068fb"
+        }
+      }
+    }
+  },
+  "performance": {
+    "reference": {
+      "wall_seconds": 17.483380002,
+      "process_peak_rss_bytes": 5026648064
+    },
+    "allowed_regression": {
+      "wall_seconds": {
+        "relative_fraction": 0.03,
+        "absolute_seconds": 2.0
+      },
+      "process_peak_rss_bytes": {
+        "relative_fraction": 0.05,
+        "absolute_bytes": 268435456
+      }
+    }
+  }
+}

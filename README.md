@@ -30,7 +30,7 @@ semantics.  Its input is:
   endpoint may represent the other;
 - solver configuration for the pairwise precision/recall objective.
 
-Its output is the selected roots, one root assignment per node, an exact
+Its output is the selected roots, one root mapping per node, an exact
 partition audit, and solver statistics.  The default solver is
 Relax–Project–Refine (RPR).
 
@@ -68,3 +68,13 @@ result = partition_csr(
 `result` contains `roots`, `root_of`, `audit`, `rounds`, and `provenance`.
 The audit and every round expose the exact optimized `objective` in addition
 to pairwise precision, recall, and F1.
+
+## Design and historical records
+
+- `docs/relax-project-refine.md` defines the RPR objective and search model.
+- `docs/domain-adapters.md` defines the domain-neutral adapter boundary.
+- `docs/rpr-integration-history.md` preserves implementation and extraction
+  notes from the original production stage.
+- `benchmarks/rpr/` preserves the RPR benchmark contract, result summary, and
+  standalone solver prototype. The migrated runners are historical records and
+  are not guaranteed to execute against the current public API.
