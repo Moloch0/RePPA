@@ -1,13 +1,12 @@
-# RPR 工程实现与迁移记录
+# RPR 分区实现规范：Admissible Rooted Partition Relax–Project–Refine
 
-> 状态：从原下游生产阶段迁入的历史工程记录
-> 当前理论：`docs/relax-project-refine.md`
-> 当前实现：`rootpart/src/problem.cpp` 与 `rootpart/src/rpr.cpp`
+> 状态：生产实现规范
+> 理论依据：`docs/relax-project-refine.md`
+> 核心实现：`rootpart/src/problem.cpp` 与 `rootpart/src/rpr.cpp`
+> Python 入口：`rootpart.partition_csr()`
 
-本文保留 RPR 从下游应用中抽取为独立库时形成的实现、性能和审计记录。
-其中求解器输入、可行域、目标函数、事务式迭代和最终审计属于 `rootpart`；
-产物写出、额外覆盖关系和流水线编排只用于解释历史 benchmark，不构成
-`rootpart` 的公开 API，也不向库中引入任何具体应用领域语义。
+本文由原有分区阶段实现文档直接迁入，保留原章节顺序、实现约束、审计字段和
+性能记录，仅将阶段名与领域相关名称改为 `rootpart` 的中性术语。
 
 ## 1. 输入契约
 
@@ -192,9 +191,9 @@ epoch search 结束后执行最终 Legal refinement。每次 refinement sweep：
 验证通过后才构造 `PartitionResult`。`roots` 按 canonical `NodeId` 排序，
 `root_of` 覆盖完整 node universe。
 
-## 7. 历史下游流水线
+## 7. 生产流水线
 
-抽取前的下游流水线大致按以下顺序执行：
+生产流水线按以下顺序执行：
 
 ```text
 validate configuration and relation artifact
@@ -283,7 +282,7 @@ accepted
 
 被拒绝轮记录的是 rollback 前 candidate 的指标与耗时，`accepted=false` 明确其未成为最终 incumbent。
 
-## 9. 历史 artifact 审计与 provenance
+## 9. Artifact 审计与 provenance
 
 representation result 使用 root artifact schema 4、representation domain schema 3。节点排序只由
 canonical `NodeId` 表达，TSV 不再重复保存 rank：
