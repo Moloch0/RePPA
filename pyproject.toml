@@ -1,0 +1,40 @@
+[build-system]
+requires = [
+  "setuptools>=68",
+  "wheel",
+  "pybind11>=2.10",
+  "numpy>=1.24",
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rootpart"
+version = "0.1.0"
+description = "Sparse admissible rooted-partition solver"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.24"]
+license = {text = "MIT"}
+authors = [{name = "Moloch0"}]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: C++",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+]
+
+[project.urls]
+Homepage = "https://github.com/Moloch0/rootpart"
+Repository = "https://github.com/Moloch0/rootpart.git"
+Issues = "https://github.com/Moloch0/rootpart/issues"
+
+[tool.setuptools]
+package-dir = {"" = "."}
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["rootpart*"]
+
+[tool.setuptools.package-data]
+rootpart = ["include/rootpart/*.hpp", "src/*.cpp"]
