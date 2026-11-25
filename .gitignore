@@ -2,7 +2,7 @@
 *.so
 __pycache__/
 build/
-d*
+/dist/
 .cache/
 .pytest_cache/
 CMakeFiles/
