@@ -68,12 +68,3 @@ result = partition_csr(
 `result` contains `roots`, `root_of`, `audit`, `rounds`, and `provenance`.
 The audit and every round expose the exact optimized `objective` in addition
 to pairwise precision, recall, and F1.
-
-## Design and historical records
-
-- `docs/relax-project-refine.md` defines the RPR objective and search model.
-- `docs/rpr-implementation.md` is the directly migrated implementation record
-  for the original production stage, with domain-neutral terminology.
-- `benchmarks/rpr/` preserves the RPR benchmark contract, result summary, and
-  standalone solver prototype. The migrated runners are historical records and
-  are not guaranteed to execute against the current public API.
