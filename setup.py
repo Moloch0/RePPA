@@ -20,14 +20,14 @@ if ENVIRONMENT_CC.is_file() and ENVIRONMENT_CXX.is_file():
 setup(
     ext_modules=[
         Pybind11Extension(
-            "rootpart._core",
+            "reppa._core",
             [
-                "rootpart/src/module.cpp",
-                "rootpart/src/problem.cpp",
-                "rootpart/src/rpr.cpp",
+                "reppa/src/module.cpp",
+                "reppa/src/problem.cpp",
+                "reppa/src/rpr.cpp",
             ],
             include_dirs=[
-                "rootpart/include",
+                "reppa/include",
                 str(Path(sys.prefix) / "include"),
             ],
             extra_compile_args=["-O3", "-fopenmp"],

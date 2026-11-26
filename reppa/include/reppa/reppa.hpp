@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-namespace rootpart {
+namespace reppa {
 
 using NodeId = std::uint32_t;
 
@@ -138,7 +138,7 @@ struct SolverProvenance {
     std::string selected_initialization;
     std::string requested_initialization;
     std::string objective_policy{"exact_pairwise_f_beta"};
-    std::string feasibility_policy{"directed_root_admissibility"};
+    std::string feasibility_policy{"pairwise_representative_admissibility"};
     std::string numerical_policy{"exact_integer_cross_multiplication"};
     std::string optimality_claim{"heuristic_local_optimum"};
     bool deterministic_reduction{true};
@@ -148,8 +148,8 @@ struct SolverProvenance {
 };
 
 struct PartitionResult {
-    std::vector<NodeId> roots;
-    std::vector<NodeId> root_of;
+    std::vector<NodeId> representatives;
+    std::vector<NodeId> representative_of;
     PartitionAudit audit;
     SolverProvenance provenance;
     SolverStatistics statistics;
@@ -171,4 +171,4 @@ struct PartitionResult {
     return partition(problem.view(), config);
 }
 
-}  // namespace rootpart
+}  // namespace reppa

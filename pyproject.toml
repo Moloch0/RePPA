@@ -8,9 +8,9 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "rootpart"
-version = "0.1.0"
-description = "Sparse admissible rooted-partition solver"
+name = "RePPA"
+version = "0.2.0"
+description = "Representative Partitioning with Pairwise Admissibility"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = ["numpy>=1.24"]
@@ -25,16 +25,16 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/Moloch0/rootpart"
-Repository = "https://github.com/Moloch0/rootpart.git"
-Issues = "https://github.com/Moloch0/rootpart/issues"
+Homepage = "https://github.com/Moloch0/RePPA"
+Repository = "https://github.com/Moloch0/RePPA.git"
+Issues = "https://github.com/Moloch0/RePPA/issues"
 
 [tool.setuptools]
 package-dir = {"" = "."}
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["rootpart*"]
+include = ["reppa*"]
 
 [tool.setuptools.package-data]
-rootpart = ["include/rootpart/*.hpp", "src/*.cpp"]
+reppa = ["include/reppa/*.hpp", "src/*.cpp"]

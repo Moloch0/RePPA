@@ -1,4 +1,4 @@
-#include "rootpart/rootpart.hpp"
+#include "reppa/reppa.hpp"
 
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
@@ -13,19 +13,19 @@ namespace py = pybind11;
 
 namespace {
 
-py::object ratio_object(const std::optional<rootpart::ExactRatio>& ratio) {
+py::object ratio_object(const std::optional<reppa::ExactRatio>& ratio) {
     if (!ratio.has_value()) return py::none();
     return py::make_tuple(ratio->numerator, ratio->denominator);
 }
 
-py::dict result_dict(const rootpart::PartitionResult& result) {
-    const auto vector_array = [](const std::vector<rootpart::NodeId>& values) {
-        py::array_t<rootpart::NodeId> array(values.size());
+py::dict result_dict(const reppa::PartitionResult& result) {
+    const auto vector_array = [](const std::vector<reppa::NodeId>& values) {
+        py::array_t<reppa::NodeId> array(values.size());
         if (!values.empty()) {
             std::memcpy(
                 array.mutable_data(),
                 values.data(),
-                values.size() * sizeof(rootpart::NodeId));
+                values.size() * sizeof(reppa::NodeId));
         }
         return array;
     };
@@ -78,8 +78,8 @@ py::dict result_dict(const rootpart::PartitionResult& result) {
         result.provenance.termination_reason;
 
     py::dict output;
-    output["roots"] = vector_array(result.roots);
-    output["root_of"] = vector_array(result.root_of);
+    output["representatives"] = vector_array(result.representatives);
+    output["representative_of"] = vector_array(result.representative_of);
     output["audit"] = std::move(audit);
     output["rounds"] = std::move(rounds);
     output["provenance"] = std::move(provenance);
@@ -89,7 +89,8 @@ py::dict result_dict(const rootpart::PartitionResult& result) {
 }  // namespace
 
 PYBIND11_MODULE(_core, module) {
-    module.doc() = "Sparse admissible rooted-partition solver";
+    module.doc() =
+        "Representative Partitioning with Pairwise Admissibility solver";
     module.def(
         "partition_csr",
         [](py::array_t<std::uint64_t,
@@ -108,17 +109,17 @@ PYBIND11_MODULE(_core, module) {
                 throw std::invalid_argument(
                     "offsets, nodes, and admissibility must be one-dimensional");
             }
-            rootpart::SparseProblemView problem{
+            reppa::SparseProblemView problem{
                 std::span(offsets.data(), static_cast<std::size_t>(offsets.size())),
                 std::span(nodes.data(), static_cast<std::size_t>(nodes.size())),
                 std::span(
                     admissibility.data(),
                     static_cast<std::size_t>(admissibility.size())),
                 static_cast<std::uint64_t>(nodes.size() / 2)};
-            rootpart::PartitionResult result;
+            reppa::PartitionResult result;
             {
                 py::gil_scoped_release release;
-                result = rootpart::partition(
+                result = reppa::partition(
                     problem,
                     {.recall_weight = recall_weight,
                      .min_delta = min_delta,

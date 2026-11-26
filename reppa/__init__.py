@@ -4,7 +4,7 @@ from pathlib import Path
 
 from ._core import partition_csr
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 
 def get_include() -> str:

@@ -1,6 +1,9 @@
-# rootpart
+# RePPA
 
-`rootpart` partitions a sparse reference graph into rooted blocks.
+**RePPA** stands for **Representative Partitioning with Pairwise
+Admissibility**. It partitions a sparse reference graph into blocks, each with
+one member selected as its representative. Every representative-to-member
+assignment must satisfy the directed pairwise admissibility relation.
 
 ## Installation
 
@@ -8,7 +11,7 @@ Install the Python package directly from the tagged public repository:
 
 ```bash
 python -m pip install \
-  "rootpart @ git+https://github.com/Moloch0/rootpart.git@v0.1.0"
+  "RePPA @ git+https://github.com/Moloch0/RePPA.git@v0.2.0"
 ```
 
 The C++ library supports normal CMake installation and package discovery:
@@ -19,8 +22,8 @@ cmake --build build
 cmake --install build --prefix /your/install/prefix
 ```
 
-Consumers can then use `find_package(rootpart CONFIG REQUIRED)` and link
-`rootpart::rootpart`.
+Consumers can then use `find_package(RePPA CONFIG REQUIRED)` and link
+`RePPA::RePPA`.
 
 The library has no sequence, structure, peptide, database, or artifact
 semantics.  Its input is:
@@ -30,7 +33,7 @@ semantics.  Its input is:
   endpoint may represent the other;
 - solver configuration for the pairwise precision/recall objective.
 
-Its output is the selected roots, one root mapping per node, an exact
+Its output is the selected representatives, one representative mapping per node, an exact
 partition audit, and solver statistics.  The default solver is
 Relax–Project–Refine (RPR).
 
@@ -51,7 +54,7 @@ duplicate edges are rejected.
 Python exposes the same boundary without PepClust-specific objects:
 
 ```python
-from rootpart import partition_csr
+from reppa import partition_csr
 
 result = partition_csr(
     offsets,
@@ -65,6 +68,6 @@ result = partition_csr(
 )
 ```
 
-`result` contains `roots`, `root_of`, `audit`, `rounds`, and `provenance`.
+`result` contains `representatives`, `representative_of`, `audit`, `rounds`, and `provenance`.
 The audit and every round expose the exact optimized `objective` in addition
 to pairwise precision, recall, and F1.

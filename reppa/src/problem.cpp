@@ -1,11 +1,11 @@
-#include "rootpart/rootpart.hpp"
+#include "reppa/reppa.hpp"
 
 #include <algorithm>
 #include <limits>
 #include <stdexcept>
 #include <vector>
 
-namespace rootpart {
+namespace reppa {
 namespace {
 
 constexpr std::uint8_t kSourceRepresentsNeighbor = 1u << 0;
@@ -40,7 +40,7 @@ SparseProblem make_sparse_problem(
     std::span<const UndirectedEdge> input_edges) {
     if (node_count > std::numeric_limits<NodeId>::max()) {
         throw std::invalid_argument(
-            "rootpart supports at most 2^32-1 nodes");
+            "RePPA supports at most 2^32-1 nodes");
     }
 
     std::vector<UndirectedEdge> edges(input_edges.begin(), input_edges.end());
@@ -54,12 +54,12 @@ SparseProblem make_sparse_problem(
     for (const auto& edge : edges) {
         if (edge.first >= edge.second || edge.second >= node_count) {
             throw std::invalid_argument(
-                "rootpart edges must satisfy first < second < node_count");
+                "RePPA edges must satisfy first < second < node_count");
         }
         const auto key = std::pair{edge.first, edge.second};
         if (previous == key) {
             throw std::invalid_argument(
-                "rootpart reference graph contains a duplicate edge");
+                "RePPA reference graph contains a duplicate edge");
         }
         previous = key;
         ++degree[edge.first];
@@ -71,13 +71,13 @@ SparseProblem make_sparse_problem(
     for (std::size_t node = 0; node < node_count; ++node) {
         if (degree[node] >
             std::numeric_limits<std::uint64_t>::max() - problem.offsets[node]) {
-            throw std::overflow_error("rootpart CSR offset overflow");
+            throw std::overflow_error("RePPA CSR offset overflow");
         }
         problem.offsets[node + 1] = problem.offsets[node] + degree[node];
     }
     if (problem.offsets.back() >
         static_cast<std::uint64_t>(std::numeric_limits<std::size_t>::max())) {
-        throw std::overflow_error("rootpart CSR exceeds process address space");
+        throw std::overflow_error("RePPA CSR exceeds process address space");
     }
 
     problem.nodes.resize(static_cast<std::size_t>(problem.offsets.back()));
@@ -98,10 +98,10 @@ SparseProblem make_sparse_problem(
 
 std::span<const NodeId> SparseProblem::neighbors(NodeId node) const {
     if (node >= node_count()) {
-        throw std::out_of_range("rootpart node is outside the sparse graph");
+        throw std::out_of_range("RePPA node is outside the sparse graph");
     }
     return std::span(nodes).subspan(
         offsets[node], offsets[node + 1] - offsets[node]);
 }
 
-}  // namespace rootpart
+}  // namespace reppa

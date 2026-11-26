@@ -1,4 +1,4 @@
-#include "rootpart/rootpart.hpp"
+#include "reppa/reppa.hpp"
 
 #include <boost/multiprecision/cpp_int.hpp>
 
@@ -16,7 +16,7 @@
 //     immediately before the first Project, then maintained incrementally.
 //   * Project runs only on changed communities.
 //   * Legal uses exact dynamic pending bits.  After every accepted color batch,
-//     N(moved) and root(c) U N(root(c)) for size/root-changed communities are marked
+//     N(moved) and representative(c) U N(representative(c)) for size/representative-changed communities are marked
 //     immediately; later colors consume those marks in the same sweep.  Past colors
 //     remain pending for the next Legal sweep.  This matches full-color sweep semantics
 //     without scanning all nodes' adjacency.
@@ -89,14 +89,14 @@ struct ThreadScratch {
     std::vector<u32> deltaTouched;
     std::vector<u32> emptyComms;
     // Sparse legal invalidation sources accumulated during one legal sweep.
-    // movedVerts invalidate N(v); changedRoots invalidate root+N(root).
+    // movedVerts invalidate N(v); changedRepresentatives invalidate representative+N(representative).
     std::vector<u32> movedVerts;
-    std::vector<u32> changedRoots;
+    std::vector<u32> changedRepresentatives;
     std::vector<u32> peeledLocal;
     // Transaction undo logs. Each vertex/community is recorded at most once
     // per transaction using global epoch stamps.
     std::vector<std::pair<u32,u32>> partUndo;
-    std::vector<std::pair<u32,u32>> rootUndo;
+    std::vector<std::pair<u32,u32>> representativeUndo;
     ThreadScratch() = default;
     ThreadScratch(u32 n, int nt, bool needDense) :
         deltaByOwner(static_cast<size_t>(nt)),
@@ -111,10 +111,10 @@ struct ThreadScratch {
         deltaTouched.reserve(1024);
         emptyComms.reserve(256);
         movedVerts.reserve(1024);
-        changedRoots.reserve(1024);
+        changedRepresentatives.reserve(1024);
         peeledLocal.reserve(1024);
         partUndo.reserve(4096);
-        rootUndo.reserve(2048);
+        representativeUndo.reserve(2048);
         for (auto& b : deltaByOwner) b.reserve(256);
         for (auto& b : memberRemoveByOwner) b.reserve(256);
         for (auto& b : memberAddByOwner) b.reserve(256);
@@ -138,7 +138,7 @@ struct Graph {
     const u64* off = nullptr;
     const u32* adj = nullptr;
     const std::uint8_t* admissibility = nullptr;
-    static Graph view(rootpart::SparseProblemView csr) {
+    static Graph view(reppa::SparseProblemView csr) {
         if (csr.node_count() > std::numeric_limits<u32>::max() ||
             csr.offsets.empty() || csr.offsets.front() != 0 ||
             csr.offsets.back() != csr.nodes.size() ||
@@ -202,9 +202,9 @@ struct Graph {
     inline bool neighbor_can_represent(u64 edge) const noexcept {
         return (admissibility[edge] & 2u) != 0;
     }
-    bool can_represent(u32 root, u32 member) const noexcept {
-        if (root == member) return true;
-        for (u64 edge = off[root]; edge < off[root + 1]; ++edge) {
+    bool can_represent(u32 representative, u32 member) const noexcept {
+        if (representative == member) return true;
+        for (u64 edge = off[representative]; edge < off[representative + 1]; ++edge) {
             if (adj[edge] == member) return source_can_represent(edge);
         }
         return false;
@@ -247,7 +247,7 @@ public:
         validate_objective_range();
         workPart.resize(n);
         workSize.resize(n);
-        workRoot.resize(n, INVALID);
+        workRepresentative.resize(n, INVALID);
         maxDegree = 0;
         for (u32 v = 0; v < n; ++v) maxDegree = std::max<u64>(maxDegree, g.degree(v));
 #ifdef _OPENMP
@@ -277,9 +277,9 @@ public:
         internalDeg.resize(n);
         keep.resize(n);
         projBestDeg.resize(n);
-        projRoot.resize(n, INVALID);
+        projRepresentative.resize(n, INVALID);
         partTxnStamp.resize(n, 0);
-        rootTxnStamp.resize(n, 0);
+        representativeTxnStamp.resize(n, 0);
         memberHead.resize(n, INVALID);
         memberNext.resize(n, INVALID);
         memberPrev.resize(n, INVALID);
@@ -335,8 +335,8 @@ public:
             throw std::runtime_error("J_lambda is undefined for initialization seed");
         workPart = std::move(seed.part);
         workSize = std::move(seed.size);
-        workRoot.assign(n, INVALID);
-        for (u32 c = 0; c < n; ++c) if (workSize[c]) workRoot[c] = c; // seed IDs are root IDs
+        workRepresentative.assign(n, INVALID);
+        for (u32 c = 0; c < n; ++c) if (workSize[c]) workRepresentative[c] = c; // seed IDs are representative IDs
         workAudit = seed.a;
         rebuild_free_ids();
         build_coloring();
@@ -413,7 +413,7 @@ public:
                       << " accept=" << (accept ? 1 : 0)
                       << " epoch_time=" << (sec_now()-t0) << " s\n";
 
-            rootpart::RoundStatistics round;
+            reppa::RoundStatistics round;
             round.round = static_cast<std::uint32_t>(roundStatistics.size());
             round.candidate = metrics(workAudit);
             round.relax_wall_ns = wall_ns(tr1 - tr0);
@@ -428,10 +428,10 @@ public:
                     objective_gain_at_least(workAudit, startAudit, min_delta);
                 commit_transaction();
                 terminationReason =
-                    rootpart::TerminationReason::max_epochs_reached;
+                    reppa::TerminationReason::max_epochs_reached;
                 if (!continue_search) {
                     terminationReason =
-                        rootpart::TerminationReason::min_delta_reached;
+                        reppa::TerminationReason::min_delta_reached;
                     break;
                 }
             } else {
@@ -440,7 +440,7 @@ public:
                 // transaction. Rebuild only on this rare terminal rollback path.
                 internalReady = false;
                 build_internal_cache();
-                terminationReason = rootpart::TerminationReason::no_strict_improvement;
+                terminationReason = reppa::TerminationReason::no_strict_improvement;
                 break;
             }
         }
@@ -448,24 +448,24 @@ public:
         refine_legal(min_delta);
     }
 
-    [[nodiscard]] u32 root_of(u32 vertex) const {
-        return workRoot[workPart[vertex]];
+    [[nodiscard]] u32 representative_of(u32 vertex) const {
+        return workRepresentative[workPart[vertex]];
     }
 
     [[nodiscard]] const Audit& current_audit() const noexcept {
         return workAudit;
     }
 
-    [[nodiscard]] rootpart::Metrics current_metrics() const {
+    [[nodiscard]] reppa::Metrics current_metrics() const {
         return metrics(workAudit);
     }
 
-    [[nodiscard]] const std::vector<rootpart::RoundStatistics>&
+    [[nodiscard]] const std::vector<reppa::RoundStatistics>&
     rounds() const noexcept {
         return roundStatistics;
     }
 
-    [[nodiscard]] rootpart::TerminationReason
+    [[nodiscard]] reppa::TerminationReason
     termination_reason() const noexcept {
         return terminationReason;
     }
@@ -476,12 +476,12 @@ public:
 
     void verify_final_partition() const {
         for (u32 v = 0; v < n; ++v) {
-            const u32 root = root_of(v);
-            if (root >= n) throw std::runtime_error("partition root is out of range");
-            if (root == v) continue;
-            if (!g.can_represent(root, v)) {
+            const u32 representative = representative_of(v);
+            if (representative >= n) throw std::runtime_error("partition representative is out of range");
+            if (representative == v) continue;
+            if (!g.can_represent(representative, v)) {
                 throw std::runtime_error(
-                    "partition contains a non-admissible root/member assignment");
+                    "partition contains a non-admissible representative/member assignment");
             }
         }
         const Audit exact = audit(workPart, workSize);
@@ -496,13 +496,13 @@ private:
     const LambdaRatio lambda;
     const bool verbose;
     std::string selectedInitialization;
-    std::vector<rootpart::RoundStatistics> roundStatistics;
-    rootpart::TerminationReason terminationReason{
-        rootpart::TerminationReason::max_epochs_reached};
+    std::vector<reppa::RoundStatistics> roundStatistics;
+    reppa::TerminationReason terminationReason{
+        reppa::TerminationReason::max_epochs_reached};
 
     // Single persistent accepted/current state. Successful epochs mutate
     // this state in place; speculative changes are protected by sparse undo logs.
-    std::vector<u32> workPart, workSize, workRoot;
+    std::vector<u32> workPart, workSize, workRepresentative;
     Audit workAudit; // exact incremental T/P for the current state
 
     // Proper graph coloring makes each color class an independent set.  The hot
@@ -538,7 +538,7 @@ private:
     u64 legalActiveEdges = 0;
     u64 lastPeeled = 0;
 
-    std::vector<u32> internalDeg, projBestDeg, projRoot;
+    std::vector<u32> internalDeg, projBestDeg, projRepresentative;
     std::vector<uint8_t> keep;
     std::vector<u32> peeledVerts;
 
@@ -550,10 +550,10 @@ private:
     std::vector<u32> changedCommStamp, changedComms;
     u32 changedCommEpoch = 1;
 
-    // Sparse transaction journal. Membership/root values are recorded only on
+    // Sparse transaction journal. Membership/representative values are recorded only on
     // their first modification in one transaction. Free IDs are maintained in
     // bulk on the forward path; the rare terminal rollback simply rebuilds them.
-    std::vector<u32> partTxnStamp, rootTxnStamp;
+    std::vector<u32> partTxnStamp, representativeTxnStamp;
     u32 txnEpoch = 1;
     bool txnActive = false;
 
@@ -562,7 +562,7 @@ private:
         return static_cast<u64>(seconds * 1000000000.0 + 0.5);
     }
 
-    static rootpart::ExactRatio reduced_ratio(u128 numerator, u128 denominator) {
+    static reppa::ExactRatio reduced_ratio(u128 numerator, u128 denominator) {
         if (denominator == 0) throw std::logic_error("ratio denominator is zero");
         u128 left = numerator;
         u128 right = denominator;
@@ -583,8 +583,8 @@ private:
             static_cast<u64>(denominator)};
     }
 
-    rootpart::Metrics metrics(const Audit& value) const {
-        rootpart::Metrics result;
+    reppa::Metrics metrics(const Audit& value) const {
+        reppa::Metrics result;
         const u64 denominator = objective_den(value);
         if (denominator != 0) {
             result.objective = reduced_ratio(
@@ -605,12 +605,12 @@ private:
         ++txnEpoch;
         if (txnEpoch == 0) {
             std::fill(partTxnStamp.begin(), partTxnStamp.end(), 0);
-            std::fill(rootTxnStamp.begin(), rootTxnStamp.end(), 0);
+            std::fill(representativeTxnStamp.begin(), representativeTxnStamp.end(), 0);
             txnEpoch = 1;
         }
         for (auto& sc : tls) {
             sc.partUndo.clear();
-            sc.rootUndo.clear();
+            sc.representativeUndo.clear();
         }
         txnActive = true;
     }
@@ -621,10 +621,10 @@ private:
         sc.partUndo.push_back({v, workPart[v]});
     }
 
-    inline void record_root_before_change(ThreadScratch& sc, u32 c) {
-        if (!txnActive || rootTxnStamp[c] == txnEpoch) return;
-        rootTxnStamp[c] = txnEpoch;
-        sc.rootUndo.push_back({c, workRoot[c]});
+    inline void record_representative_before_change(ThreadScratch& sc, u32 c) {
+        if (!txnActive || representativeTxnStamp[c] == txnEpoch) return;
+        representativeTxnStamp[c] = txnEpoch;
+        sc.representativeUndo.push_back({c, workRepresentative[c]});
     }
 
     inline void txn_free_push(u32 c) { freeIds.push_back(c); }
@@ -649,14 +649,14 @@ private:
 
     void commit_transaction() {
         txnActive = false;
-        for (auto& sc : tls) { sc.partUndo.clear(); sc.rootUndo.clear(); }
+        for (auto& sc : tls) { sc.partUndo.clear(); sc.representativeUndo.clear(); }
     }
 
     void rollback_transaction(const Audit& auditBefore) {
-        // Restore roots and memberships. Each item appears once per transaction.
+        // Restore representatives and memberships. Each item appears once per transaction.
         for (auto& sc : tls) {
-            for (auto it = sc.rootUndo.rbegin(); it != sc.rootUndo.rend(); ++it)
-                workRoot[it->first] = it->second;
+            for (auto it = sc.representativeUndo.rbegin(); it != sc.representativeUndo.rend(); ++it)
+                workRepresentative[it->first] = it->second;
             for (auto it = sc.partUndo.rbegin(); it != sc.partUndo.rend(); ++it)
                 workPart[it->first] = it->second;
         }
@@ -667,7 +667,7 @@ private:
         workAudit = auditBefore;
         disable_legal_frontier();
         txnActive = false;
-        for (auto& sc : tls) { sc.partUndo.clear(); sc.rootUndo.clear(); }
+        for (auto& sc : tls) { sc.partUndo.clear(); sc.representativeUndo.clear(); }
     }
 
     void validate_objective_range() const {
@@ -766,7 +766,7 @@ private:
             const double tl1 = sec_now();
             const bool accept = objective_better(workAudit, startAudit);
 
-            rootpart::RoundStatistics round;
+            reppa::RoundStatistics round;
             round.round = static_cast<std::uint32_t>(roundStatistics.size());
             round.candidate = metrics(workAudit);
             round.legal_wall_ns = wall_ns(tl1 - tl0);
@@ -832,7 +832,7 @@ private:
         s.name = "local";
         s.part.assign(n, INVALID);
         s.size.assign(n, 0);
-        std::vector<uint8_t> isRoot(n, 1);
+        std::vector<uint8_t> isRepresentative(n, 1);
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static)
 #endif
@@ -840,7 +840,7 @@ private:
             u32 v = static_cast<u32>(vv);
             for (u64 e = g.off[v]; e < g.off[v + 1]; ++e) {
                 u32 u = g.adj[e];
-                if (higher_precedence(u, v)) { isRoot[v] = 0; break; }
+                if (higher_precedence(u, v)) { isRepresentative[v] = 0; break; }
             }
         }
 #ifdef _OPENMP
@@ -848,11 +848,11 @@ private:
 #endif
         for (i64 vv = 0; vv < static_cast<i64>(n); ++vv) {
             u32 v = static_cast<u32>(vv);
-            if (isRoot[v]) { s.part[v] = v; continue; }
+            if (isRepresentative[v]) { s.part[v] = v; continue; }
             u32 best = INVALID;
             for (u64 e = g.off[v]; e < g.off[v + 1]; ++e) {
                 u32 u = g.adj[e];
-                if (isRoot[u] && g.neighbor_can_represent(e) &&
+                if (isRepresentative[u] && g.neighbor_can_represent(e) &&
                     (best == INVALID || higher_precedence(u, best))) best = u;
             }
             s.part[v] = (best == INVALID ? v : best);
@@ -871,14 +871,14 @@ private:
             for (u64 edge = g.off[left]; edge < g.off[left + 1]; ++edge) {
                 const u32 right = g.adj[edge];
                 if (left >= right) continue;
-                const u32 root = g.source_can_represent(edge)
+                const u32 representative = g.source_can_represent(edge)
                     ? left
                     : g.neighbor_can_represent(edge) ? right : INVALID;
-                if (root == INVALID) continue;
-                const u32 member = root == left ? right : left;
-                s.part[member] = root;
+                if (representative == INVALID) continue;
+                const u32 member = representative == left ? right : left;
+                s.part[member] = representative;
                 s.size[member] = 0;
-                s.size[root] = 2;
+                s.size[representative] = 2;
                 return s;
             }
         }
@@ -1176,7 +1176,7 @@ private:
 
     u64 local_move_sweep(
         bool legal, u64 penaltyNum, u64 penaltyDen, bool reverse) {
-        static constexpr u32 ROOT_BIT = 0x80000000u;
+        static constexpr u32 REPRESENTATIVE_BIT = 0x80000000u;
         static constexpr u32 COUNT_MASK = 0x7fffffffu;
         static constexpr u32 NO_MOVE = INVALID;
         static constexpr u32 NEW_SINGLETON = INVALID - 1u;
@@ -1188,7 +1188,7 @@ private:
         if (legal) {
             for (auto& sc : tls) {
                 sc.movedVerts.clear();
-                sc.changedRoots.clear();
+                sc.changedRepresentatives.clear();
             }
         }
 
@@ -1285,7 +1285,7 @@ private:
                 sc.emptyComms.clear();
                 if (legal && legalDynamicMode) {
                     sc.movedVerts.clear();
-                    sc.changedRoots.clear();
+                    sc.changedRepresentatives.clear();
                     for (int owner = 0; owner < nt; ++owner) {
                         sc.dirtyByOwner[static_cast<size_t>(owner)].clear();
                     }
@@ -1313,7 +1313,7 @@ private:
                     propDest[v] = NO_MOVE;
                     propActualDst[v] = NO_MOVE;
                     propSrc[v] = src;
-                    if (legal && workRoot[src] == v && srcSize > 1) continue;
+                    if (legal && workRepresentative[src] == v && srcSize > 1) continue;
 
                     sc.cands.clear();
                     u32 srcCnt = 0;
@@ -1337,17 +1337,17 @@ private:
                             }
                             u32 x = sc.smallVal[h];
                             const u32 cnt = (x & COUNT_MASK) + 1u;
-                            x = (x & ROOT_BIT) | cnt;
-                            if (legal && workRoot[c] == u &&
-                                g.neighbor_can_represent(e)) x |= ROOT_BIT;
+                            x = (x & REPRESENTATIVE_BIT) | cnt;
+                            if (legal && workRepresentative[c] == u &&
+                                g.neighbor_can_represent(e)) x |= REPRESENTATIVE_BIT;
                             sc.smallVal[h] = x;
                         } else {
                             u32 x = sc.cntFlag[c];
                             if ((x & COUNT_MASK) == 0) sc.cands.push_back(c);
                             const u32 cnt = (x & COUNT_MASK) + 1u;
-                            x = (x & ROOT_BIT) | cnt;
-                            if (legal && workRoot[c] == u &&
-                                g.neighbor_can_represent(e)) x |= ROOT_BIT;
+                            x = (x & REPRESENTATIVE_BIT) | cnt;
+                            if (legal && workRepresentative[c] == u &&
+                                g.neighbor_can_represent(e)) x |= REPRESENTATIVE_BIT;
                             sc.cntFlag[c] = x;
                         }
                         srcCnt += (c == src);
@@ -1364,7 +1364,7 @@ private:
                             const u32 x = smallCounter ? sc.smallVal[key] : sc.cntFlag[c];
                             if (!smallCounter) sc.cntFlag[c] = 0;
                             if (c == src) continue;
-                            if (legal && !(x & ROOT_BIT)) continue;
+                            if (legal && !(x & REPRESENTATIVE_BIT)) continue;
                             u32 dc = x & COUNT_MASK;
                             u32 sz = workSize[c];
                             if (sz == 0) continue;
@@ -1390,7 +1390,7 @@ private:
                             const u32 x = smallCounter ? sc.smallVal[key] : sc.cntFlag[c];
                             if (!smallCounter) sc.cntFlag[c] = 0;
                             if (c == src) continue;
-                            if (legal && !(x & ROOT_BIT)) continue;
+                            if (legal && !(x & REPRESENTATIVE_BIT)) continue;
                             u32 dc = x & COUNT_MASK;
                             u32 sz = workSize[c];
                             if (sz == 0) continue;
@@ -1494,16 +1494,16 @@ private:
                 }
 
                 if (batchAccept) {
-                    // Save legal size-dependency roots before possibly emptying a source.
+                    // Save legal size-dependency representatives before possibly emptying a source.
                     for (u32 c : sc.deltaTouched) {
                         i64 dc = batchDelta[c];
-                        if (legal && dc != 0 && workRoot[c] != INVALID)
-                            sc.changedRoots.push_back(workRoot[c]);
+                        if (legal && dc != 0 && workRepresentative[c] != INVALID)
+                            sc.changedRepresentatives.push_back(workRepresentative[c]);
                         workSize[c] = static_cast<u32>(static_cast<i64>(workSize[c]) + dc);
                         if (workSize[c] == 0) {
                             if (legal) {
-                                record_root_before_change(sc, c);
-                                workRoot[c] = INVALID;
+                                record_representative_before_change(sc, c);
+                                workRepresentative[c] = INVALID;
                             }
                             sc.emptyComms.push_back(c);
                         }
@@ -1524,9 +1524,9 @@ private:
                             propActualDst[v] = realDst;
                             workSize[realDst] = 1;
                             if (legal) {
-                                record_root_before_change(sc, realDst);
-                                workRoot[realDst] = v;
-                                sc.changedRoots.push_back(v);
+                                record_representative_before_change(sc, realDst);
+                                workRepresentative[realDst] = v;
+                                sc.changedRepresentatives.push_back(v);
                             }
                         } else {
                             record_part_before_change(sc, v);
@@ -1573,7 +1573,7 @@ private:
                             if (dst == NO_MOVE) return;
                             u32 src = workPart[v];
                             u32 srcSize = workSize[src];
-                            if (legal && workRoot[src] == v && srcSize > 1) return;
+                            if (legal && workRepresentative[src] == v && srcSize > 1) return;
                             u32 dstSize = (dst == NEW_SINGLETON) ? 0u : workSize[dst];
                             if (dst != NEW_SINGLETON && dstSize == 0) return;
                             i64 dT = static_cast<i64>(propDstCnt[v]) - static_cast<i64>(propSrcCnt[v]);
@@ -1582,9 +1582,9 @@ private:
                                       - static_cast<i128>(penaltyNum) * dP;
                             if (gain <= 0) return;
 
-                            if (legal && workRoot[src] != INVALID) serialSc.changedRoots.push_back(workRoot[src]);
-                            if (legal && dst != NEW_SINGLETON && workRoot[dst] != INVALID)
-                                serialSc.changedRoots.push_back(workRoot[dst]);
+                            if (legal && workRepresentative[src] != INVALID) serialSc.changedRepresentatives.push_back(workRepresentative[src]);
+                            if (legal && dst != NEW_SINGLETON && workRepresentative[dst] != INVALID)
+                                serialSc.changedRepresentatives.push_back(workRepresentative[dst]);
 
                             u32 realDst = dst;
                             if (dst == NEW_SINGLETON) {
@@ -1595,8 +1595,8 @@ private:
                             --workSize[src];
                             if (workSize[src] == 0) {
                                 if (legal) {
-                                    record_root_before_change(serialSc, src);
-                                    workRoot[src] = INVALID;
+                                    record_representative_before_change(serialSc, src);
+                                    workRepresentative[src] = INVALID;
                                 }
                                 txn_free_push(src);
                             }
@@ -1607,9 +1607,9 @@ private:
                             propActualDst[v] = realDst;
                             if (legal) {
                                 if (dst == NEW_SINGLETON) {
-                                    record_root_before_change(serialSc, realDst);
-                                    workRoot[realDst] = v;
-                                    serialSc.changedRoots.push_back(v);
+                                    record_representative_before_change(serialSc, realDst);
+                                    workRepresentative[realDst] = v;
+                                    serialSc.changedRepresentatives.push_back(v);
                                 }
                                 serialSc.movedVerts.push_back(v);
                             }
@@ -1716,10 +1716,10 @@ private:
                                 emit_dirty(g.adj[e]);
                         }
                     }
-                    // In Legal, community c is a candidate only for root(c)'s
-                    // neighbors. A size/root change therefore affects exactly
-                    // root(c) U N(root(c)), not the whole community neighborhood.
-                    for (u32 r : sc.changedRoots) {
+                    // In Legal, community c is a candidate only for representative(c)'s
+                    // neighbors. A size/representative change therefore affects exactly
+                    // representative(c) U N(representative(c)), not the whole community neighborhood.
+                    for (u32 r : sc.changedRepresentatives) {
                         if (r == INVALID) continue;
                         emit_dirty(r);
                         for (u64 e = g.off[r]; e < g.off[r + 1]; ++e) emit_dirty(g.adj[e]);
@@ -1832,12 +1832,12 @@ private:
                 const u32 v = rec.first;
                 local += g.degree(v);
                 const u32 oldc = rec.second, newc = workPart[v];
-                if (oldc != INVALID && workRoot[oldc] != INVALID) local += g.degree(workRoot[oldc]) + 1;
-                if (newc != INVALID && workRoot[newc] != INVALID) local += g.degree(workRoot[newc]) + 1;
+                if (oldc != INVALID && workRepresentative[oldc] != INVALID) local += g.degree(workRepresentative[oldc]) + 1;
+                if (newc != INVALID && workRepresentative[newc] != INVALID) local += g.degree(workRepresentative[newc]) + 1;
             }
-            for (const auto& rec : in.rootUndo) {
+            for (const auto& rec : in.representativeUndo) {
                 if (rec.second != INVALID) local += g.degree(rec.second) + 1;
-                const u32 nr = workRoot[rec.first];
+                const u32 nr = workRepresentative[rec.first];
                 if (nr != INVALID) local += g.degree(nr) + 1;
             }
             estEdges += local;
@@ -1878,12 +1878,12 @@ private:
                 const u32 v = rec.first;
                 emit_source(v);
                 const u32 oldc = rec.second, newc = workPart[v];
-                if (oldc != INVALID) emit_source(workRoot[oldc]);
-                if (newc != INVALID) emit_source(workRoot[newc]);
+                if (oldc != INVALID) emit_source(workRepresentative[oldc]);
+                if (newc != INVALID) emit_source(workRepresentative[newc]);
             }
-            for (const auto& rec : in.rootUndo) {
+            for (const auto& rec : in.representativeUndo) {
                 emit_source(rec.second);
-                emit_source(workRoot[rec.first]);
+                emit_source(workRepresentative[rec.first]);
             }
 #ifdef _OPENMP
 #pragma omp barrier
@@ -1949,9 +1949,9 @@ private:
                 const u32 c = changedComms[static_cast<size_t>(ii)];
                 const u32 oldSize = workSize[c];
                 if (oldSize == 0) {
-                    if (workRoot[c] != INVALID) {
-                        record_root_before_change(sc, c);
-                        workRoot[c] = INVALID;
+                    if (workRepresentative[c] != INVALID) {
+                        record_representative_before_change(sc, c);
+                        workRepresentative[c] = INVALID;
                     }
                     continue;
                 }
@@ -1970,7 +1970,7 @@ private:
                     }
                 }
                 if (r == INVALID) throw std::runtime_error("membership list/size mismatch in Project");
-                projRoot[c] = r;
+                projRepresentative[c] = r;
                 projBestDeg[c] = best;
                 keep[r] = 1;
                 for (u64 e = g.off[r]; e < g.off[r + 1]; ++e) {
@@ -1984,9 +1984,9 @@ private:
                 deltaP64 += static_cast<long long>(static_cast<u64>(keptSize) * (keptSize - 1) / 2)
                           - static_cast<long long>(static_cast<u64>(oldSize) * (oldSize - 1) / 2);
                 workSize[c] = keptSize;
-                if (workRoot[c] != r) {
-                    record_root_before_change(sc, c);
-                    workRoot[c] = r;
+                if (workRepresentative[c] != r) {
+                    record_representative_before_change(sc, c);
+                    workRepresentative[c] = r;
                 }
 
                 for (u32 v = memberHead[c]; v != INVALID; v = memberNext[v]) {
@@ -2092,10 +2092,10 @@ private:
                 propSrc[v] = oldc;
                 propActualDst[v] = newc;
                 record_part_before_change(sc, v);
-                record_root_before_change(sc, newc);
+                record_representative_before_change(sc, newc);
                 workPart[v] = newc;
                 workSize[newc] = 1;
-                workRoot[newc] = v;
+                workRepresentative[newc] = v;
                 internalDeg[v] = 0;
             }
         }
@@ -2205,7 +2205,7 @@ static LambdaRatio parse_lambda_ratio(std::string_view text) {
 
 } // namespace lstar
 
-namespace rootpart {
+namespace reppa {
 namespace {
 
 SolverProvenance make_provenance(
@@ -2219,7 +2219,7 @@ SolverProvenance make_provenance(
         .selected_initialization = std::move(initialization),
         .requested_initialization = config.initialization,
         .objective_policy = "exact_pairwise_f_beta",
-        .feasibility_policy = "directed_root_admissibility",
+        .feasibility_policy = "pairwise_representative_admissibility",
         .numerical_policy = "exact_integer_cross_multiplication",
         .optimality_claim = "heuristic_local_optimum",
         .deterministic_reduction = true,
@@ -2234,9 +2234,9 @@ PartitionResult make_singleton_result(
     const ExactRatio& lambda,
     const ExactRatio& min_delta,
     TerminationReason reason) {
-    std::vector<NodeId> roots(problem.node_count());
-    std::iota(roots.begin(), roots.end(), NodeId{0});
-    auto root_of = roots;
+    std::vector<NodeId> representatives(problem.node_count());
+    std::iota(representatives.begin(), representatives.end(), NodeId{0});
+    auto representative_of = representatives;
     PartitionAudit audit{
         .recall_weight = lambda,
         .reference_edges = problem.reference_edges,
@@ -2246,8 +2246,8 @@ PartitionResult make_singleton_result(
     SolverStatistics statistics{
         .termination_reason = reason};
     return {
-        .roots = std::move(roots),
-        .root_of = std::move(root_of),
+        .representatives = std::move(representatives),
+        .representative_of = std::move(representative_of),
         .audit = std::move(audit),
         .provenance = make_provenance(
             config, min_delta, "all_singletons", reason),
@@ -2345,16 +2345,16 @@ PartitionResult partition(
     solver.solve(config.max_epochs, min_delta);
     solver.verify_final_partition();
 
-    std::vector<NodeId> root_of(problem.node_count());
+    std::vector<NodeId> representative_of(problem.node_count());
     std::vector<std::uint8_t> is_representative(problem.node_count(), 0);
     for (NodeId node = 0; node < problem.node_count(); ++node) {
-        root_of[node] = solver.root_of(node);
-        is_representative[solver.root_of(node)] = 1;
+        representative_of[node] = solver.representative_of(node);
+        is_representative[solver.representative_of(node)] = 1;
     }
-    std::vector<NodeId> roots;
-    roots.reserve(problem.node_count());
+    std::vector<NodeId> representatives;
+    representatives.reserve(problem.node_count());
     for (NodeId node = 0; node < problem.node_count(); ++node) {
-        if (is_representative[node]) roots.push_back(node);
+        if (is_representative[node]) representatives.push_back(node);
     }
 
     const auto raw_audit = solver.current_audit();
@@ -2373,8 +2373,8 @@ PartitionResult partition(
         .rounds = solver.rounds(),
         .termination_reason = termination_reason};
     return {
-        .roots = std::move(roots),
-        .root_of = std::move(root_of),
+        .representatives = std::move(representatives),
+        .representative_of = std::move(representative_of),
         .audit = std::move(audit),
         .provenance = make_provenance(
             config,
@@ -2384,4 +2384,4 @@ PartitionResult partition(
         .statistics = std::move(statistics)};
 }
 
-}  // namespace rootpart
+}  // namespace reppa

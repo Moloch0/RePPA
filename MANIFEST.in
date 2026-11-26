@@ -1,5 +1,5 @@
-recursive-include rootpart/include *.hpp
-recursive-include rootpart/src *.cpp
+recursive-include reppa/include *.hpp
+recursive-include reppa/src *.cpp
 recursive-include cmake *.cmake.in
 include CMakeLists.txt
 include LICENSE
